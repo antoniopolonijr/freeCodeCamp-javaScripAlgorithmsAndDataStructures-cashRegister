@@ -1,6 +1,8 @@
-/// Cash Register
+// Helper functions to convert between dollars and cents to avoid precision issues with floating-point numbers.
+const dollarsToCents = (dollars) => dollars * 100;
+const centsToDollars = (cents) => (cents / 100).toFixed(2);
 
-// Initial variables
+// Initial variables for the price of the item and the cash in the drawer (in dollars)
 let price = 1.87;
 let cid = [
   ["PENNY", 1.01],
@@ -14,7 +16,7 @@ let cid = [
   ["ONE HUNDRED", 100],
 ];
 
-// Currency units and their values
+// Array of currency units and their corresponding values in dollars
 const currencyUnits = [
   ["ONE HUNDRED", 100.0],
   ["TWENTY", 20.0],
@@ -27,65 +29,106 @@ const currencyUnits = [
   ["PENNY", 0.01],
 ];
 
-// variables assigned to access elements in HTML document
-const totalPrice = document.getElementById("total-price");
-const cash = document.getElementById("cash"); // set the "cash"
-const purchaseBtn = document.getElementById("purchase-btn"); // set the "Purchase" buttom
-const changeInDrawer = document.getElementById("change-in-drawer");
-const changeDue = document.getElementById("change-due"); // set the "output"
+// Accessing HTML elements
+const totalPriceElement = document.getElementById("total-price");
+const cashElement = document.getElementById("cash");
+const changeDueElement = document.getElementById("change-due");
+const cashInDrawerElement = document.getElementById("cash-in-drawer");
+const purchaseBtn = document.getElementById("purchase-btn");
 
-// Functions
+// Function to display the current cash in the drawer on the webpage
+const displayCashInDrawer = () => {
+  totalPriceElement.textContent = `Total Price: $${price.toFixed(2)}`;
+  cashInDrawerElement.innerHTML = cid
+    .map(
+      (currency) => `<p>${currency[0]}: $${Number(currency[1]).toFixed(2)}</p>`
+    )
+    .join(""); // Creating an HTML p item for each currency unit and its value
+};
 
-const checkCash = (cash) => {
-  // Check if the customer has enough money
+// Main function to handle the purchase and calculate the change
+const handlePurchase = () => {
+  if (!cashElement.value) {
+    return;
+  }
+
+  let cash = parseFloat(cashElement.value); // dollars
+  let changeDue = dollarsToCents(cash) - dollarsToCents(price); // calculating change due in cents
+
+  // Check if the customer has provided enough cash
   if (cash < price) {
     alert("Customer does not have enough money to purchase the item");
     return;
   }
 
-  // Handle exact cash payment
+  // Check if the customer paid the exact amount
   if (cash === price) {
-    changeDue.innerHTML =
-      "<p>No change due - customer paid with exact cash</p>";
+    changeDueElement.textContent =
+      "No change due - customer paid with exact cash";
     return;
   }
 
-  calculateChange(cash);
-};
+  // Calculate the total cash in the drawer (in cents)
+  let totalCid = cid.reduce((acc, curr) => acc + dollarsToCents(curr[1]), 0);
 
-// Calculate the change due
-const calculateChange = (cash) => {
-  let currentChange = (cash - price).toFixed(2);
-  const totalCID = cid
-    .reduce((total, currency) => total + currency[1], 0)
-    .toFixed(2);
-
-  if (currentChange > totalCID) {
-    changeDue.innerHTML = "<p>Status: INSUFFICIENT_FUNDS</p>";
+  // Check if the drawer has enough cash to give the change
+  if (totalCid < changeDue) {
+    changeDueElement.textContent = "Status: INSUFFICIENT_FUNDS";
     return;
+  }
+
+  // Calculate the change to give back using available currency units
+  let changeArray = [];
+  let originalChangeDue = changeDue;
+
+  for (let [unitName, unitValue] of currencyUnits) {
+    let currencyAmount = dollarsToCents(
+      cid.find((currency) => currency[0] === unitName)[1]
+    ); // Find the amount available in the drawer for this unit (in cents)
+    let amountToReturn = 0;
+
+    // Determine how much of each currency unit is needed for the change
+    while (changeDue >= unitValue * 100 && currencyAmount >= unitValue * 100) {
+      changeDue -= unitValue * 100;
+      currencyAmount -= unitValue * 100;
+      amountToReturn += unitValue * 100;
+    }
+
+    // Add the currency unit and amount to the change array if any of that unit is needed
+    if (amountToReturn > 0) {
+      changeArray.push([unitName, centsToDollars(amountToReturn)]);
+      // Update the cash in the drawer for this unit
+      cid.find((currency) => currency[0] === unitName)[1] =
+        centsToDollars(currencyAmount);
+    }
+  }
+
+  displayCashInDrawer(); // Update the display of cash in drawer after the transaction
+
+  if (changeDue > 0) {
+    changeDueElement.textContent = "Status: INSUFFICIENT_FUNDS";
+  } else if (originalChangeDue === totalCid) {
+    // Check if the entire cash in drawer was used
+    changeDueElement.innerHTML = `Status: CLOSED ${changeArray
+      .map((change) => `<p>${change[0]}: $${change[1]}</p>`)
+      .join(" ")}`;
+  } else {
+    changeDueElement.innerHTML = `Status: OPEN ${changeArray
+      .map((change) => `<p>${change[0]}: $${change[1]}</p>`)
+      .join(" ")}`;
   }
 };
 
-// update html
-totalPrice.textContent = `Total Price: $${price.toFixed(2)}`;
+// Event listener for the purchase button click
+purchaseBtn.addEventListener("click", handlePurchase);
 
-cid.forEach((element) => {
-  changeInDrawer.innerHTML += `<p>${element[0]}: $${element[1].toFixed(2)}</p>`;
-});
-
-// Event Listeners
-
-// event listener to call the checkCash function when users click the Check button.
-purchaseBtn.addEventListener("click", () => {
-  checkCash(Number(cash.value)); // take the value of text input and execute the checkCash function
-  cash.value = ""; // clear the input text in the html
-});
-
-// event listener to call the checkCash function when users press the Enter / Return key.
-cash.addEventListener("keydown", (e) => {
+// Event listener when users press the Enter / Return key.
+cashElement.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
-    e.preventDefault(); // method to stop the browser from refreshing the page after submitting the form.
-    checkCash(Number(cash.value)); // take the value of text input and execute the checkCash function
-    cash.value = ""; // clear the input text in the html
+    e.preventDefault();
+    handlePurchase();
   }
 });
+
+// Display the initial cash in the drawer when the page loads
+displayCashInDrawer();
